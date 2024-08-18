@@ -379,13 +379,15 @@ class GFLayer(nn.Module):
     def __init__(self, in_features, out_features, bias=True, scale=3, omega=1,
                  is_first=False, is_last=False, 
                  init_method='Pytorch', init_gain=1, fbs=None, hbs=None,
-                 alphaType=None, alphaReqGrad=False):
+                 alphaType=None, alphaReqGrad=False,
+                 norm_activation=False):
         super().__init__()
         self.scale = scale
         self.omega = omega
         self.is_last = is_last
         self.linear = nn.Linear(in_features, out_features, bias=bias)
-                
+        self.norm_activation = norm_activation
+        
         # init weights
         init_weights_cond(init_method, self.linear, omega, init_gain, is_first)
             
@@ -395,33 +397,37 @@ class GFLayer(nn.Module):
     def forward(self, input):
         wx_b = self.linear(input) 
         if not self.is_last:
-            gauss_finer_activation(wx_b, self.scale, self.omega)
+            return gauss_finer_activation(wx_b, self.scale, self.omega)
         return wx_b # is_last==True
+
 
 class GF(nn.Module):
     def __init__(self, in_features, out_features, hidden_layers, hidden_features, 
                  scale=3, omega=1, 
                  init_method='Pytorch', init_gain=1, fbs=None, hbs=None, 
-                 alphaType=None, alphaReqGrad=False):
+                 alphaType=None, alphaReqGrad=False,
+                 norm_activation=False):
         super().__init__()
         self.net = []
         self.net.append(GFLayer(in_features, hidden_features, is_first=True, 
                                 scale=scale, omega=omega, 
                                 init_method=init_method, init_gain=init_gain, fbs=fbs,
-                                alphaType=alphaType, alphaReqGrad=alphaReqGrad))
+                                alphaType=alphaType, alphaReqGrad=alphaReqGrad, 
+                                norm_activation=norm_activation))
         
         for i in range(hidden_layers):
             self.net.append(GFLayer(hidden_features, hidden_features, 
                                      scale=scale, omega=omega, 
                                      init_method=init_method, init_gain=init_gain, hbs=hbs,
-                                     alphaType=alphaType, alphaReqGrad=alphaReqGrad))
+                                     alphaType=alphaType, alphaReqGrad=alphaReqGrad,
+                                     norm_activation=norm_activation))
          
         self.net.append(GFLayer(hidden_features, out_features, is_last=True, 
                                 scale=scale, omega=omega, 
-                                init_method=init_method, init_gain=init_gain, hbs=hbs)) # omega: For weight init
+                                init_method=init_method, init_gain=init_gain, hbs=hbs,
+                                norm_activation=norm_activation)) # omega: For weight init
         self.net = nn.Sequential(*self.net)
     
     def forward(self, coords):
         output = self.net(coords)
         return output
-    
